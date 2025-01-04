@@ -1,0 +1,30 @@
+{
+  "name": "ai-summary",
+  "version": "1.0.0",
+  "description": "Use LLM to generate summary",
+  "main": "summarize.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anuj-adobe/ai-summary.git"
+  },
+  "author": "Anuj Mahajan",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/anuj-adobe/ai-summary/issues"
+  },
+  "homepage": "https://github.com/anuj-adobe/ai-summary#readme",
+  "type": "module",
+  "dependencies": {
+    "@azure/identity": "^4.5.0",
+    "@azure/openai": "^2.0.0",
+    "axios": "^1.6.2",
+    "cheerio": "^1.0.0-rc.12",
+    "dotenv": "^16.4.7",
+    "marked": "^15.0.5",
+    "node-fetch": "^3.3.2",
+    "openai": "^4.77.3"
+  }
+}
