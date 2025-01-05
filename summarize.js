@@ -1,8 +1,27 @@
 import Website from "./website.js";
 import 'dotenv/config';
 import fetch from 'node-fetch';
-import { marked } from 'marked';
 import fs from 'fs';
+import readline from 'readline';
+
+const MODELS = {
+  GPT: 'gpt',
+  LLAMA: 'llama'
+};
+
+
+// CLI Input Helper
+const askQuestion = (query) => {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return new Promise((resolve) => rl.question(query, (ans) => {
+    rl.close();
+    resolve(ans);
+  }));
+};
 
 // System Prompt
 const system_prompt = 'You are an assistant that analyzes the contents of a website \
@@ -64,63 +83,78 @@ const fetchAzureOpenAI = async (deployment, apiVersion, endpoint, apiKey, messag
   }
 };
 
-// Summarize Function
-const summarize = async (url) => {
+const fetchFromLLaMA = async (messages) => {
+  const url = process.env.LLAMA_ENDPOINT || 'http://localhost:11434/api/chat';
+  const model = process.env.LLAMA_MODEL || 'llama3.2';
+  console.log('🔗 Fetching Summary from LLama Model API:', url);
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model,
+        messages: messages,
+        stream: false
+      })
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`❌ Fetch Error: ${response.status} ${response.statusText}\n${errorBody}`);
+    }
+
+    const data = await response.json();
+    console.log('✅ LLama Response:', JSON.stringify(data, null, 2));
+
+    if (!data.message || data.message.content === 0) {
+      throw new Error('❌ No message returned from LLama');
+    }
+
+    return data.message?.content || 'No summary available';
+  } catch (error) {
+    console.error('❌ Local Model API Error:', error.message);
+    throw error;
+  }
+};
+
+const summarize = async (url, modelChoice) => {
+  console.log('🔍 Summarizing website...');
   const website = new Website(url);
   await website.fetchWebsite();
 
-  const deployment = process.env.OPENAI_MODEL_DEPLOYMENT;
-  const apiVersion = process.env.AZURE_API_VERSION;
-  const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
-  const apiKey = process.env.AZURE_OPENAI_API_KEY;
+  if (modelChoice === MODELS.GPT) {
+    const deployment = process.env.OPENAI_MODEL_DEPLOYMENT;
+    const apiVersion = process.env.AZURE_API_VERSION;
+    const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
+    const apiKey = process.env.AZURE_OPENAI_API_KEY;
 
-  if (!deployment || !apiVersion || !endpoint || !apiKey) {
-    throw new Error('🚨 Azure OpenAI environment variables are not set properly.');
+    if (!deployment || !apiVersion || !endpoint || !apiKey) {
+      throw new Error('🚨 Azure OpenAI environment variables are not set properly.');
+    }
+
+    return await fetchAzureOpenAI(deployment, apiVersion, endpoint, apiKey, messages_for(website));
+  } else if (modelChoice === MODELS.LLAMA) {
+    return await fetchFromLLaMA(messages_for(website));
+  } else {
+    throw new Error(`❌ Unsupported model choice. Choose from ${Object.values(MODELS).join(', ')}`);
   }
-
-  console.log('🔗 Connecting to Azure OpenAI with Fetch:');
-  console.log(`📍 Endpoint: ${endpoint}`);
-  console.log(`🚀 Deployment: ${deployment}`);
-  console.log(`📅 API Version: ${apiVersion}`);
-
-  const summary = await fetchAzureOpenAI(deployment, apiVersion, endpoint, apiKey, messages_for(website));
-  return summary;
-};
-
-/**
- * Converts Markdown summary to HTML format.
- * @param {string} summaryMarkdown - The summary in Markdown format.
- * @returns {string} - The summary converted to HTML.
- */
-const renderSummaryAsHTML = (summaryMarkdown) => {
-  if (!summaryMarkdown) {
-    console.log('❌ No summary provided to render.');
-    return '';
-  }
-
-  console.log('📝 Rendering Summary as HTML:\n');
-
-  // Convert Markdown to HTML
-  const html = marked.parse(summaryMarkdown, {
-    mangle: false,
-    headerIds: false
-  });
-
-  console.log(html); // Display the raw HTML if needed for debugging
-
-  return html;
 };
 
 async function main() {
-  console.log('🔍 Summarizing website...');
   try {
-    const URL_STRING = 'https://edwarddonner.com';
+    const URL_STRING = await askQuestion('🌐 Enter the website URL: ');
+    const MODEL_CHOICE = await askQuestion(`🤖 Choose model type ${Object.values(MODELS).join(', ')}: `);
+
     const url = new URL(URL_STRING);
-    const summary = await summarize(URL_STRING);
-    const htmlSummary = renderSummaryAsHTML(summary);
-    const outputFileName = `output/summary_${url.host}.html`;
-    fs.writeFileSync(outputFileName, `<html><body>${htmlSummary}</body></html>`);
-    console.log(`✅ HTML Summary saved to ${outputFileName}`);
+    const summary = await summarize(URL_STRING, MODEL_CHOICE);
+    const outputFileName = `output/summary_${url.host}.md`;
+    fs.mkdirSync('output', { recursive: true });
+    fs.writeFileSync(outputFileName, summary);
+
+    console.log(`✅ Summary saved to ${outputFileName}`);
   } catch (error) {
     console.error('❌ Error:', error.message);
   }

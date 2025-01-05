@@ -19,6 +19,7 @@ class Website {
   // Fetch and parse the website
   async fetchWebsite() {
     try {
+      console.log('🔗 Fetching Website:', this.url);
       const response = await axios.get(this.url, { headers });
       const $ = load(response.data);
 
